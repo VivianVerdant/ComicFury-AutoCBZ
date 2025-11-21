@@ -1,4 +1,4 @@
-import requests, re, shutil, os, zipfile, json
+import requests, re, shutil, os, zipfile, json, mechanicalsoup
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor
 
@@ -41,21 +41,35 @@ class ComicScraper:
         If a JSON file with chapters data exists, loads from there instead
         """
         # Try to load chapters from JSON first
-        chapters = self.load_chapters_from_json()
+        chapters = None # self.load_chapters_from_json()
         if chapters is not None:
             return chapters
             
         # If no JSON file or loading failed, scrape from website
         print(f"Scraping chapters from: {self.url}")
-        
-        # Send a GET request to the URL
-        response = requests.get(self.url)
+
+        browser = mechanicalsoup.StatefulBrowser()
+        page = browser.open(self.url)
+
         
         # Check if the request was successful
-        if response.status_code == 200:
+        if page.status_code == 200:
+
+            # browser.launch_browser(soup=None)
             # Parse the HTML content of the page
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = page.soup
+
+            form = browser.select_form("form[action^='/read']")
+            for submit_tag in soup.find_all('input'):
+                if submit_tag["value"] and submit_tag["value"] == "View Webcomic":
+                    form.choose_submit(None)
+                    page = browser.submit_selected()
+                    browser.add_soup(page, {'features': 'lxml'})
+                    soup = page.soup
+                    break
             
+            # browser.launch_browser()
+
             # Find all chapters links in the archive
             chapter_el = []
             for a_tag in soup.find_all('a'):
